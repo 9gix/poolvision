@@ -15,12 +15,12 @@ class PoolTable(object):
 
     """
     Pocket Reference Numbering
-    o---------o         1: Top Left Pocket
-    |         |         2: Top Right Pocket
-    |    o    |         3: Left Center Pocket
-    |         |         4: Right Center Pocket  
-    |         |         5: Bottom Left Pocket
-    o         o         6: Bottom Right Pocket
+    o---------o         p1: Top Left Pocket
+    |         |         p2: Top Right Pocket
+    |    o    |         p3: Left Center Pocket
+    |         |         p4: Right Center Pocket  
+    |         |         p5: Bottom Left Pocket
+    o         o         p6: Bottom Right Pocket
     |         |         
     |    ^    | 
     |   < >   | 
@@ -69,10 +69,15 @@ class PoolVision(object):
     _table = None
     def __init__(self, cap):
         self.cap = cap
+        
         if self.cap.isOpened():
             ret, self.raw_frame = self.cap.read()
             self.process_frame()
-            cv2.imshow('finaloutput',self.frame)
+            cv2.imshow('Pool Vision',self.frame)
+
+        self.selection = None
+        self.drag_start = None
+        self.track_window = None
 
     def detectCloth(self):
         self.blue = cv2.inRange(self.hsv, np.array([100, 60, 60]), np.array([110, 255, 255]))
@@ -80,8 +85,22 @@ class PoolVision(object):
         cloth = cv2.dilate(self.blue, np.ones((5,5),np.uint8), iterations=14)
         cloth = cv2.bitwise_and(self.gray, self.gray, mask=cloth)
         self.cloth = cloth
+
+    def detectTableManual(self):
+        self.p1 = (235, 686)  # Pocket 1,2,5,6 (see ref above)
+        self.p2 = (366, 530)
+        self.p5 = (1210, 680)
+        self.p6 = (1050, 530)
+
+        self.p3 = ((self.p5[0] + self.p1[0]) / 2, (self.p5[1] + self.p1[1]) / 2)
+        self.p4 = ((self.p6[0] + self.p2[0]) / 2, (self.p6[1] + self.p2[1]) / 2)
+
+        self.table_mask = np.zeros((self.raw_frame.shape[:2]), np.uint8)
+        self.table_poly = np.array([self.p1,self.p2,self.p6,self.p5])
+        cv2.fillConvexPoly(self.table_mask, self.table_poly, 255)
         
     def detectTable(self):
+        self.detectTableManual()
         self.detectCloth()
         self.gray = cv2.bitwise_and(self.gray, self.gray, mask=self.cloth)
         # TODO: Build a Table Model
@@ -94,7 +113,7 @@ class PoolVision(object):
         pass
 
     def detectBoundary(self):
-        table_edge = cv2.bitwise_and(self.edge, self.edge, mask=self.cloth)
+        table_edge = cv2.bitwise_and(self.edge, self.edge, mask=self.table_mask)
         lines = cv2.HoughLinesP(table_edge, rho=1, theta=np.pi/180, threshold=10, minLineLength=130, maxLineGap=10)
 
         # TODO: Need to determine the table region from the detected lines.
@@ -102,7 +121,7 @@ class PoolVision(object):
 
 
     def detectCircle(self):
-        self.cloth = cv2.bitwise_and(self.gray, self.gray, mask=self.cloth)
+        self.cloth = cv2.bitwise_and(self.gray, self.gray, mask=self.table_mask)
         return cv2.HoughCircles(self.cloth, method=cv2.HOUGH_GRADIENT, dp=1, minDist=12, param1=20, param2=7, minRadius=14, maxRadius=15)[0]
 
     def overlayCircle(self, circle):
@@ -139,9 +158,6 @@ class PoolVision(object):
         # TODO: Further Analysis
 
         # TODO: Video Presentation
-        lines = self.detectBoundary()
-        for line in lines:
-            self.overlayLine(*line[0])
 
         circles = self.detectCircle()
         for circle in circles:
@@ -152,7 +168,7 @@ class PoolVision(object):
         while(self.cap.isOpened()):
             ret, self.raw_frame = self.cap.read()
             self.process_frame()
-            cv2.imshow('finaloutput',self.raw_frame)
+            cv2.imshow('Pool Vision',self.raw_frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -161,7 +177,7 @@ def main():
     v1 = 'vids/1.mp4'
     cap = cv2.VideoCapture(v1)
     pool_vision = PoolVision(cap)
-    cv2.namedWindow('finaloutput', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Pool Vision', cv2.WINDOW_NORMAL)
     pool_vision.run()
     cap.release()
     cv2.destroyAllWindows()
