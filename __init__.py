@@ -75,9 +75,7 @@ class PoolVision(object):
             self.process_frame()
             cv2.imshow('Pool Vision',self.frame)
 
-        self.selection = None
-        self.drag_start = None
-        self.track_window = None
+        self.cueball_track = None
 
     def detectCloth(self):
         self.blue = cv2.inRange(self.hsv, np.array([100, 60, 60]), np.array([110, 255, 255]))
@@ -107,9 +105,25 @@ class PoolVision(object):
         return PoolTable((2743,1372))
 
     def detectCueBall(self):
+        # Find White Circle
+        white_circle = cv2.inRange(self.hsv, np.array([0, 0, 110]), np.array([180, 30, 255]))
+        whiteball = cv2.bitwise_and(white_circle, white_circle, mask=self.table_mask)
+        whiteball = cv2.dilate(whiteball, np.ones((5,5),np.uint8), iterations=2)
+        whiteball = cv2.erode(whiteball, np.ones((5,5),np.uint8), iterations=4)
+        whiteball = cv2.dilate(whiteball, np.ones((5,5),np.uint8), iterations=3)
+        
+        self.cueball_features = cv2.goodFeaturesToTrack(self.gray, maxCorners=5, qualityLevel=0.01, minDistance=5, mask=whiteball)
+        if self.cueball_features is not None:
+            for f in self.cueball_features:
+                x,y = f.ravel()
+                cv2.circle(self.raw_frame, (x,y), 4, (0, 255, 255))
+
+    def trackCueBall(self):
+        #cv.calcOpticalFlowPyrLK(self.prev_gray, self.gray)
         pass
 
     def detectObjectBalls(self):
+        # Find 9 colored Balls on the table exclude white.
         pass
 
     def detectBoundary(self):
@@ -132,6 +146,11 @@ class PoolVision(object):
 
     def process_frame(self):
         # TODO: Frame Preparation
+        try:
+            self.prev_frame = self.frame
+            self.prev_gray = self.gray
+        except AttributeError:
+            pass
         self.frame = self.raw_frame.copy()
         self.frame = cv2.GaussianBlur(self.frame, (5,5), 0)
         self.hsv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
@@ -148,6 +167,7 @@ class PoolVision(object):
         self.detectObjectBalls()
 
         # TODO: Ball tracking
+        self.trackCueBall()
 
         # TODO: Player Detection
 
