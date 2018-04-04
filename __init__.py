@@ -82,7 +82,7 @@ class PoolVision(object):
             ret, self.raw_frame = self.cap.read()
             self.crop_img = self.raw_frame[500:700, 200:1250]
             self.origin = (10, 10)
-            self.minus_origin = (self.origin[0], -self.origin[1] + 2)
+            self.minus_origin = (self.origin[0], -self.origin[1])
             self.lefttop = self.origin
             self.bottomright = (-self.origin[0] + self.width * 2, -self.origin[1] + self.width)
             self.initTransformationMatrix()
@@ -131,7 +131,7 @@ class PoolVision(object):
                          maxRadius=15)[0]
 
     def overlayCircle(self, circle):
-        if self.lefttop[0] < circle[0] < self.bottomright[0] and self.lefttop[1] < circle[1] < self.bottomright[1]:
+        if self.lefttop[0] + 10 < circle[0] < self.bottomright[0] - 10 and self.lefttop[1] + 10 < circle[1] < self.bottomright[1] - 10:
             cv2.circle(self.raw_frame, (circle[0], circle[1]), circle[2], (0, 255, 0))
 
     def overlayLine(self, x1, y1, x2, y2):
@@ -147,7 +147,7 @@ class PoolVision(object):
 
         # TODO: Frame Preparation
         self.frame = self.crop_img.copy()
-        self.frame = cv2.GaussianBlur(self.frame, (15, 15), 0)
+        self.frame = cv2.GaussianBlur(self.frame, (5, 5), 0)
         self.hsv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
 
         self.gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
