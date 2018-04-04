@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import collections
 from abc import ABCMeta
 
 class Pocket(metaclass=ABCMeta):
@@ -69,13 +70,13 @@ class PoolVision(object):
     _table = None
     def __init__(self, cap):
         self.cap = cap
+        self.cueball_track = collections.deque(maxlen=30)
         
         if self.cap.isOpened():
             ret, self.raw_frame = self.cap.read()
             self.process_frame()
             cv2.imshow('Pool Vision',self.frame)
 
-        self.cueball_track = None
 
     def detectCloth(self):
         self.blue = cv2.inRange(self.hsv, np.array([100, 60, 60]), np.array([110, 255, 255]))
@@ -113,11 +114,17 @@ class PoolVision(object):
         whiteball_mask = cv2.dilate(whiteball_mask, np.ones((5,5),np.uint8), iterations=3)
 
         ctrs, hierarchy = cv2.findContours(whiteball_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[1:]
-        cv2.drawContours(self.raw_frame, ctrs, -1, (0,255,0), 2)
+        if len(ctrs) > 0:
+            largest_contour = max(ctrs, key=cv2.contourArea)
+            ((x, y), radius) = cv2.minEnclosingCircle(largest_contour)
+            M = cv2.moments(largest_contour)
+            Cx = int(M['m10'] // M['m00'])
+            Cy = int(M['m01'] // M['m00'])
+            self.cueball = (Cx, Cy)
+            self.cueball_track.appendleft(self.cueball)
 
+            cv2.circle(self.raw_frame, (int(x), int(y)), int(radius), (255,0,0), 2)
 
-
-        
         self.cueball_features = cv2.goodFeaturesToTrack(self.gray, maxCorners=5, qualityLevel=0.01, minDistance=5, mask=whiteball_mask)
         if self.cueball_features is not None:
             for f in self.cueball_features:
@@ -126,11 +133,19 @@ class PoolVision(object):
 
     def trackCueBall(self):
         #cv.calcOpticalFlowPyrLK(self.prev_gray, self.gray)
-        pass
+        cueball_track = iter(self.cueball_track)
+        prev_cueball = next(cueball_track)
+        for curr_cueball in cueball_track:
+            cv2.line(self.raw_frame, prev_cueball, curr_cueball, (255,0,0), 2)
+            prev_cueball = curr_cueball
 
     def detectObjectBalls(self):
         # Find 9 colored Balls on the table exclude white.
-        pass
+        circles = self.detectCircle()
+
+        # Distinguish each color ball and find a good corner in each of the ball
+
+
 
     def detectBoundary(self):
         table_edge = cv2.bitwise_and(self.edge, self.edge, mask=self.table_mask)
@@ -167,7 +182,9 @@ class PoolVision(object):
         # self.ball_mask = cv2.inRange(self.hsv, np.array([100, 60, 60]), np.array([110, 255, 255]))
         # self.ball_mask = cv2.bitwise_and(ball_mask, ball_mask, mask=self.table_mask)
         # self.cloth = cv2.bitwise_and(self.gray, self.gray, mask=self.ball_mask)
-        return cv2.HoughCircles(ball_candidate, method=cv2.HOUGH_GRADIENT, dp=1, minDist=14, param1=300, param2=4, minRadius=14, maxRadius=15)[0][:10]
+        circles = cv2.HoughCircles(ball_candidate, method=cv2.HOUGH_GRADIENT, dp=1, minDist=14, param1=300, param2=4, minRadius=14, maxRadius=15)[0][:10]
+        for circle in circles:
+            self.overlayCircle(circle)
 
     def overlayCircle(self, circle):
         cv2.circle(self.raw_frame, (circle[0], circle[1]), circle[2], (0, 255,0))
@@ -195,7 +212,7 @@ class PoolVision(object):
 
         # TODO: Ball Detection
         self.detectCueBall()
-        #self.detectObjectBalls()
+        self.detectObjectBalls()
 
         # TODO: Ball tracking
         self.trackCueBall()
@@ -210,9 +227,8 @@ class PoolVision(object):
 
         # TODO: Video Presentation
 
-        circles = self.detectCircle()
-        for circle in circles:
-            self.overlayCircle(circle)
+
+        
 
 
     def run(self):       
